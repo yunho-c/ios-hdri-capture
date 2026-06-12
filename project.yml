@@ -46,6 +46,7 @@ targets:
           - "-lhdri_encoder"
     dependencies:
       - sdk: ARKit.framework
+      - sdk: AVFoundation.framework
       - sdk: Metal.framework
       - sdk: MetalKit.framework
       - sdk: SceneKit.framework

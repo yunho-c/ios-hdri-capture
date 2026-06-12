@@ -11,8 +11,15 @@ final class ARCaptureViewModel: NSObject, ObservableObject {
     @Published private(set) var latestFrameTimestamp: TimeInterval?
     @Published private(set) var probeCount = 0
     @Published private(set) var latestProbe: EnvironmentProbeSnapshot?
+    @Published private(set) var highResolutionCaptureState: HighResolutionCaptureState = .idle
+    @Published private(set) var highResolutionVideoFormat: HighResolutionVideoFormatSnapshot?
+    @Published private(set) var latestHighResolutionCapture: HighResolutionFrameCapture?
 
     private var observedProbeIDs = Set<UUID>()
+
+    var canCaptureHighResolutionFrame: Bool {
+        isRunning && !highResolutionCaptureState.isCapturing && !highResolutionCaptureState.isUnsupported
+    }
 
     override init() {
         super.init()
@@ -33,6 +40,14 @@ final class ARCaptureViewModel: NSObject, ObservableObject {
         configuration.environmentTexturing = .automatic
         configuration.wantsHDREnvironmentTextures = true
         configuration.isLightEstimationEnabled = true
+        if let recommendedFormat = ARWorldTrackingConfiguration.recommendedVideoFormatForHighResolutionFrameCapturing {
+            configuration.videoFormat = recommendedFormat
+            highResolutionVideoFormat = HighResolutionVideoFormatSnapshot(format: recommendedFormat)
+            highResolutionCaptureState = .idle
+        } else {
+            highResolutionVideoFormat = nil
+            highResolutionCaptureState = .unsupported("No recommended ARKit high-resolution video format")
+        }
 
         session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
         observedProbeIDs.removeAll()
@@ -47,6 +62,40 @@ final class ARCaptureViewModel: NSObject, ObservableObject {
         session.pause()
         isRunning = false
         statusMessage = "Paused"
+    }
+
+    func captureHighResolutionFrame() {
+        guard canCaptureHighResolutionFrame else {
+            return
+        }
+
+        highResolutionCaptureState = .capturing
+        statusMessage = "Capturing high-resolution frame"
+
+        session.captureHighResolutionFrame { [weak self] frame, error in
+            guard let self else {
+                return
+            }
+
+            if let error {
+                self.highResolutionCaptureState = .failed(error.localizedDescription)
+                self.statusMessage = "High-resolution capture failed"
+                return
+            }
+
+            guard let frame else {
+                self.highResolutionCaptureState = .failed("ARKit did not return a frame")
+                self.statusMessage = "High-resolution capture failed"
+                return
+            }
+
+            self.latestHighResolutionCapture = HighResolutionFrameCapture(
+                frame: frame,
+                streamingVideoFormat: self.highResolutionVideoFormat
+            )
+            self.highResolutionCaptureState = .succeeded
+            self.statusMessage = "High-resolution frame captured"
+        }
     }
 
     private func recordProbe(_ probe: AREnvironmentProbeAnchor) {
@@ -90,34 +139,3 @@ extension ARCaptureViewModel: ARSessionDelegate {
         statusMessage = "Session interruption ended"
     }
 }
-
-private extension ARCamera.TrackingState {
-    var displayName: String {
-        switch self {
-        case .notAvailable:
-            return "Not available"
-        case .normal:
-            return "Normal"
-        case .limited(let reason):
-            return "Limited: \(reason.displayName)"
-        }
-    }
-}
-
-private extension ARCamera.TrackingState.Reason {
-    var displayName: String {
-        switch self {
-        case .initializing:
-            return "initializing"
-        case .excessiveMotion:
-            return "excessive motion"
-        case .insufficientFeatures:
-            return "insufficient features"
-        case .relocalizing:
-            return "relocalizing"
-        @unknown default:
-            return "unknown"
-        }
-    }
-}
-

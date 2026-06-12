@@ -21,17 +21,18 @@ struct ContentView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("ARKit Environment Capture")
+                            Text("ARKit High-Resolution Capture")
                                 .font(.title2)
                                 .fontWeight(.semibold)
 
-                            Text("Phase 2 captures ARKit environment probe texture metadata.")
+                            Text("Phase 3 captures a pose-aligned high-resolution AR frame; environment probes remain a low-resolution lighting reference.")
                                 .foregroundStyle(.secondary)
                         }
 
                         Divider()
 
                         statusSection
+                        highResolutionCaptureSection
                         probeSection
                         backendSection
                     }
@@ -58,6 +59,47 @@ struct ContentView: View {
             LabeledContent("Running", value: captureModel.isRunning ? "Yes" : "No")
             LabeledContent("Tracking", value: captureModel.trackingState)
             LabeledContent("Frame time", value: formattedFrameTimestamp)
+        }
+    }
+
+    private var highResolutionCaptureSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("High-Resolution Still")
+                .font(.headline)
+
+            LabeledContent("State", value: captureModel.highResolutionCaptureState.displayName)
+
+            if let videoFormat = captureModel.highResolutionVideoFormat {
+                LabeledContent("AR video format", value: videoFormat.displayName)
+                LabeledContent("Camera", value: "\(videoFormat.captureDevicePosition), \(videoFormat.captureDeviceType)")
+                LabeledContent("Recommended", value: videoFormat.isRecommendedForHighResolutionFrameCapturing ? "Yes" : "No")
+            } else {
+                Text("No recommended high-resolution ARKit video format was reported for this device.")
+                    .foregroundStyle(.secondary)
+            }
+
+            Button {
+                captureModel.captureHighResolutionFrame()
+            } label: {
+                Label("Capture High-Res Frame", systemImage: "camera.aperture")
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!captureModel.canCaptureHighResolutionFrame)
+
+            if let capture = captureModel.latestHighResolutionCapture {
+                LabeledContent("Captured image", value: capture.displayResolution)
+                LabeledContent("Pixel format", value: capture.pixelFormat)
+                LabeledContent("Planes", value: "\(capture.planeCount)")
+                LabeledContent("Frame time", value: capture.displayTimestamp)
+                LabeledContent("Tracking", value: capture.trackingState)
+                LabeledContent("Exposure", value: capture.displayExposureDuration)
+                LabeledContent("Exposure offset", value: capture.displayExposureOffset)
+                LabeledContent("Camera pose", value: capture.displayCameraTranslation)
+                LabeledContent("Intrinsics", value: capture.displayIntrinsics)
+            } else {
+                Text("Capture a frame to inspect still-image resolution, AR pose, intrinsics, and exposure metadata.")
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 

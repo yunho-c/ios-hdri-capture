@@ -58,38 +58,35 @@ Acceptance criteria:
 - The probe texture is treated as a low-resolution reference, commonly around
   `256x256` per cubemap face, not a production HDRI.
 
-## Phase 3: AVFoundation High-Resolution Capture Foundation
+## Phase 3: ARKit High-Resolution Capture Foundation
+
+Status: implemented in app; physical-device verification pending.
 
 This phase creates the real capture source for the production HDRI pipeline.
 
-1. Add an `AVCaptureSession` pipeline alongside the existing AR session.
-2. Use `AVCapturePhotoOutput` for high-resolution still capture.
-3. Choose a capture device and format explicitly:
-   - Prefer the wide camera for stable geometry and predictable field of view.
-   - Prefer RAW or Apple ProRAW when available.
-   - Fall back to high-quality processed stills when RAW is unavailable.
-4. Query and surface device capabilities:
-   - `availableRawPhotoPixelFormatTypes`
-   - Apple ProRAW support and enablement
-   - maximum bracket count
-   - supported photo dimensions and codecs
-   - supported ISO and exposure-duration ranges
-5. Add a capture settings model that records:
-   - lens/camera identity
-   - focal length and intrinsics when available
-   - exposure duration
-   - ISO
-   - white balance gains
+1. Use ARKit's high-resolution frame capture API instead of a parallel camera session.
+2. Configure `ARWorldTrackingConfiguration` with the recommended high-resolution
+   capture video format when available.
+3. Capture a manual single high-resolution AR frame first, saving the image buffer and
+   metadata into memory.
+4. Record:
+   - captured image dimensions and pixel format
+   - AR video format, camera position, and camera device type
+   - camera intrinsics
+   - exposure duration and exposure offset
    - timestamp
    - AR camera transform at capture time
-6. Build a manual single-shot capture path first, saving the image data and metadata
-   into an in-memory capture session object.
+   - tracking state at capture time
+5. Keep ARKit environment probes active as a low-resolution lighting reference.
+6. Defer direct `AVCaptureSession` RAW/ProRAW capture until a separate capture mode can
+   pause or replace ARKit camera ownership cleanly.
 
 Acceptance criteria:
 
 - A physical iPhone can capture a full-resolution still from the app.
 - The app records the AR pose and camera/exposure metadata for that still.
-- The app exposes whether RAW/ProRAW is available on the current device.
+- The app exposes the ARKit high-resolution video format and the captured still
+  resolution.
 
 ## Phase 4: Bracketed HDR Capture
 
