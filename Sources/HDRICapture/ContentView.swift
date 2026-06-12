@@ -15,6 +15,12 @@ struct ContentView: View {
                         StatusBadge(text: captureModel.statusMessage)
                             .padding()
                     }
+                    .overlay {
+                        SphericalAlignmentOverlay(
+                            alignment: captureModel.sphericalAlignment,
+                            isVisible: captureModel.sphericalCaptureState == .active
+                        )
+                    }
                     .frame(maxWidth: .infinity)
                     .frame(height: 420)
                     .background(Color.black)
@@ -79,6 +85,8 @@ struct ContentView: View {
                 if let target = session.currentTarget {
                     LabeledContent("Current target", value: target.displayName)
                     LabeledContent("Target kind", value: target.role.displayName)
+                    LabeledContent("Alignment", value: captureModel.sphericalAlignment.displayHint)
+                    LabeledContent("Angular error", value: captureModel.sphericalAlignment.displayAngularError)
                 } else {
                     LabeledContent("Current target", value: "Complete")
                 }
@@ -121,10 +129,14 @@ struct ContentView: View {
                 let captured = session.capturedTargets[target.id]
                 HStack {
                     Text(target.label)
+                        .fontWeight(target.id == session.currentTarget?.id ? .semibold : .regular)
                     Spacer()
                     if let captured {
                         Text(String(format: "%.1f deg", captured.angularErrorDegrees))
                             .foregroundStyle(.secondary)
+                    } else if target.id == session.currentTarget?.id {
+                        Text("Current")
+                            .foregroundStyle(.blue)
                     } else {
                         Text(session.status(for: target))
                             .foregroundStyle(.secondary)
@@ -289,6 +301,81 @@ private struct StatusBadge: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
             .background(.black.opacity(0.65), in: Capsule())
+    }
+}
+
+private struct SphericalAlignmentOverlay: View {
+    let alignment: SphericalAlignmentSnapshot
+    let isVisible: Bool
+
+    var body: some View {
+        GeometryReader { geometry in
+            if isVisible {
+                let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                let target = CGPoint(
+                    x: center.x + alignment.reticleX * geometry.size.width * 0.36,
+                    y: center.y + alignment.reticleY * geometry.size.height * 0.36
+                )
+
+                ZStack {
+                    Reticle(color: .white.opacity(0.75), size: 46, lineWidth: 2)
+                        .position(center)
+
+                    Reticle(color: color, size: 58, lineWidth: 4)
+                        .position(target)
+
+                    VStack(spacing: 5) {
+                        Text(alignment.displayHint)
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                        Text(alignment.displayAngularError)
+                            .font(.caption)
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(.black.opacity(0.62), in: Capsule())
+                    .position(x: center.x, y: max(42, target.y - 70))
+                }
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private var color: Color {
+        switch alignment.state {
+        case .unavailable:
+            return .gray
+        case .aligned:
+            return .green
+        case .near:
+            return .yellow
+        case .turn:
+            return .orange
+        case .behind:
+            return .red
+        }
+    }
+}
+
+private struct Reticle: View {
+    let color: Color
+    let size: CGFloat
+    let lineWidth: CGFloat
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(color, lineWidth: lineWidth)
+                .frame(width: size, height: size)
+            Rectangle()
+                .fill(color)
+                .frame(width: size * 0.42, height: lineWidth)
+            Rectangle()
+                .fill(color)
+                .frame(width: lineWidth, height: size * 0.42)
+        }
+        .shadow(color: .black.opacity(0.55), radius: 2, x: 0, y: 1)
     }
 }
 

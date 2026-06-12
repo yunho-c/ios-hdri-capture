@@ -20,6 +20,7 @@ final class ARCaptureViewModel: NSObject, ObservableObject {
     @Published private(set) var sphericalCaptureSession: SphericalCaptureSession?
     @Published private(set) var sphericalExportState: SphericalExportState = .idle
     @Published private(set) var latestSphericalExport: SphericalCaptureExportBundle?
+    @Published private(set) var sphericalAlignment: SphericalAlignmentSnapshot = .unavailable
 
     private var observedProbeIDs = Set<UUID>()
     private let exportWriter = CaptureExportWriter()
@@ -132,6 +133,7 @@ final class ARCaptureViewModel: NSObject, ObservableObject {
         sphericalCaptureState = .active
         sphericalExportState = .idle
         latestSphericalExport = nil
+        sphericalAlignment = .unavailable
         statusMessage = "Started spherical capture session"
     }
 
@@ -140,6 +142,7 @@ final class ARCaptureViewModel: NSObject, ObservableObject {
         sphericalCaptureState = .idle
         sphericalExportState = .idle
         latestSphericalExport = nil
+        sphericalAlignment = .unavailable
         statusMessage = "Reset spherical capture session"
     }
 
@@ -188,6 +191,7 @@ final class ARCaptureViewModel: NSObject, ObservableObject {
 
             if sphericalCaptureSession.isComplete {
                 self.sphericalCaptureState = .complete
+                self.sphericalAlignment = .unavailable
                 self.statusMessage = "Spherical capture complete"
             } else {
                 self.sphericalCaptureState = .active
@@ -256,6 +260,10 @@ extension ARCaptureViewModel: ARSessionDelegate {
     func session(_ session: ARSession, didUpdate frame: ARFrame) {
         latestFrameTimestamp = frame.timestamp
         trackingState = frame.camera.trackingState.displayName
+        sphericalAlignment = SphericalAlignmentSnapshot.make(
+            cameraTransform: frame.camera.transform,
+            target: sphericalCaptureSession?.currentTarget
+        )
     }
 
     func session(_ session: ARSession, didAdd anchors: [ARAnchor]) {
