@@ -121,9 +121,10 @@ Acceptance criteria:
 
 ## Phase 5: Spherical Capture Hardening
 
-Status: items 1 and 3 implemented: guided alignment reticle, directional hints,
-live angular-error display, and target-level recapture are implemented for device
-validation. Items 2 and 4 remain pending.
+Status: items 1, 3, and 4 implemented: guided alignment reticle, directional
+hints, live angular-error display, target-level recapture, higher-resolution
+preview export, and reprojection diagnostics are implemented for device
+validation. Item 2 remains pending.
 
 This phase makes the single-exposure spherical workflow reliable enough that bracketed
 capture is an extension of a proven geometry path, not a multiplier for unresolved

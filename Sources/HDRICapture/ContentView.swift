@@ -191,6 +191,7 @@ struct ContentView: View {
 
             if let export = captureModel.latestSphericalExport {
                 LabeledContent("Bundle", value: export.displayDirectoryName)
+                LabeledContent("Preview", value: export.displayPreviewResolution)
                 LabeledContent("Preview coverage", value: export.displayCoverage)
                 LabeledContent("Files", value: "\(export.shareURLs.count)")
             }

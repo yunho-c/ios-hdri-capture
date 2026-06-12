@@ -10,6 +10,8 @@ struct SphericalCaptureExportBundle: Identifiable, Equatable {
     let manifestURL: URL
     let previewURL: URL
     let fileURLs: [URL]
+    let previewWidth: Int
+    let previewHeight: Int
     let coveragePercent: Double
     let createdAt: Date
 
@@ -24,6 +26,10 @@ struct SphericalCaptureExportBundle: Identifiable, Equatable {
     var displayCoverage: String {
         String(format: "%.1f%%", coveragePercent)
     }
+
+    var displayPreviewResolution: String {
+        "\(previewWidth)x\(previewHeight)"
+    }
 }
 
 struct SphericalCaptureManifest: Codable {
@@ -32,6 +38,7 @@ struct SphericalCaptureManifest: Codable {
     let exportedAt: Date
     let patternName: String
     let preview: SphericalPreviewMetadata
+    let diagnostics: SphericalDiagnosticsMetadata
     let targets: [SphericalTargetManifest]
 }
 
@@ -42,10 +49,18 @@ struct SphericalPreviewMetadata: Codable {
     let coveragePercent: Double
 }
 
+struct SphericalDiagnosticsMetadata: Codable {
+    let coverageMaskFileName: String
+    let targetIndexFileName: String
+}
+
 struct SphericalTargetManifest: Codable {
     let target: SphericalTarget
     let status: String
     let angularErrorDegrees: Double?
+    let coverageContributionPercent: Double?
+    let coveredPixelContributionPercent: Double?
+    let debugColorHex: String?
     let imageFileName: String?
     let metadataFileName: String?
     let capture: CaptureExportMetadata?
@@ -66,7 +81,7 @@ final class SphericalCaptureExportWriter {
         try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
 
         var fileURLs: [URL] = []
-        var targetManifests: [SphericalTargetManifest] = []
+        var targetManifestsByID: [String: SphericalTargetManifest] = [:]
         var projectionInputs: [ProjectionInput] = []
 
         for target in session.targets {
@@ -84,26 +99,28 @@ final class SphericalCaptureExportWriter {
                 fileURLs.append(imageURL)
                 fileURLs.append(metadataURL)
                 projectionInputs.append(ProjectionInput(capturedTarget: capturedTarget, image: image))
-                targetManifests.append(
-                    SphericalTargetManifest(
-                        target: target,
-                        status: "captured",
-                        angularErrorDegrees: capturedTarget.angularErrorDegrees,
-                        imageFileName: imageFileName,
-                        metadataFileName: metadataFileName,
-                        capture: metadata
-                    )
+                targetManifestsByID[target.id] = SphericalTargetManifest(
+                    target: target,
+                    status: "captured",
+                    angularErrorDegrees: capturedTarget.angularErrorDegrees,
+                    coverageContributionPercent: nil,
+                    coveredPixelContributionPercent: nil,
+                    debugColorHex: nil,
+                    imageFileName: imageFileName,
+                    metadataFileName: metadataFileName,
+                    capture: metadata
                 )
             } else {
-                targetManifests.append(
-                    SphericalTargetManifest(
-                        target: target,
-                        status: "pending",
-                        angularErrorDegrees: nil,
-                        imageFileName: nil,
-                        metadataFileName: nil,
-                        capture: nil
-                    )
+                targetManifestsByID[target.id] = SphericalTargetManifest(
+                    target: target,
+                    status: "pending",
+                    angularErrorDegrees: nil,
+                    coverageContributionPercent: nil,
+                    coveredPixelContributionPercent: nil,
+                    debugColorHex: nil,
+                    imageFileName: nil,
+                    metadataFileName: nil,
+                    capture: nil
                 )
             }
         }
@@ -113,8 +130,35 @@ final class SphericalCaptureExportWriter {
         try jpegData(from: previewResult.image).write(to: previewURL, options: [.atomic])
         fileURLs.append(previewURL)
 
+        let coverageMaskURL = directoryURL.appendingPathComponent("coverage-mask.png")
+        try pngData(from: previewResult.coverageMaskImage).write(to: coverageMaskURL, options: [.atomic])
+        fileURLs.append(coverageMaskURL)
+
+        let targetIndexURL = directoryURL.appendingPathComponent("target-index.png")
+        try pngData(from: previewResult.targetIndexImage).write(to: targetIndexURL, options: [.atomic])
+        fileURLs.append(targetIndexURL)
+
+        for contribution in previewResult.targetContributions {
+            guard let manifest = targetManifestsByID[contribution.targetID] else {
+                continue
+            }
+
+            targetManifestsByID[contribution.targetID] = SphericalTargetManifest(
+                target: manifest.target,
+                status: manifest.status,
+                angularErrorDegrees: manifest.angularErrorDegrees,
+                coverageContributionPercent: contribution.coverageContributionPercent,
+                coveredPixelContributionPercent: contribution.coveredPixelContributionPercent,
+                debugColorHex: contribution.debugColor.hexString,
+                imageFileName: manifest.imageFileName,
+                metadataFileName: manifest.metadataFileName,
+                capture: manifest.capture
+            )
+        }
+
+        let targetManifests = session.targets.compactMap { targetManifestsByID[$0.id] }
         let manifest = SphericalCaptureManifest(
-            schemaVersion: 1,
+            schemaVersion: 2,
             sessionID: session.id,
             exportedAt: createdAt,
             patternName: "fast-8-single-exposure",
@@ -123,6 +167,10 @@ final class SphericalCaptureExportWriter {
                 height: previewResult.height,
                 fileName: previewURL.lastPathComponent,
                 coveragePercent: previewResult.coveragePercent
+            ),
+            diagnostics: SphericalDiagnosticsMetadata(
+                coverageMaskFileName: coverageMaskURL.lastPathComponent,
+                targetIndexFileName: targetIndexURL.lastPathComponent
             ),
             targets: targetManifests
         )
@@ -136,6 +184,8 @@ final class SphericalCaptureExportWriter {
             manifestURL: manifestURL,
             previewURL: previewURL,
             fileURLs: fileURLs,
+            previewWidth: previewResult.width,
+            previewHeight: previewResult.height,
             coveragePercent: previewResult.coveragePercent,
             createdAt: createdAt
         )
@@ -169,6 +219,13 @@ final class SphericalCaptureExportWriter {
         return data
     }
 
+    private func pngData(from image: CGImage) throws -> Data {
+        guard let data = UIImage(cgImage: image).pngData() else {
+            throw SphericalCaptureExportError.previewEncodingFailed
+        }
+        return data
+    }
+
     private func metadataData<T: Encodable>(_ metadata: T) throws -> Data {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -189,16 +246,26 @@ private struct ProjectionInput {
 
 private struct SphericalPreviewResult {
     let image: CGImage
+    let coverageMaskImage: CGImage
+    let targetIndexImage: CGImage
     let width: Int
     let height: Int
     let coveragePercent: Double
+    let targetContributions: [SphericalTargetContribution]
+}
+
+private struct SphericalTargetContribution {
+    let targetID: String
+    let debugColor: DebugColor
+    let coverageContributionPercent: Double
+    let coveredPixelContributionPercent: Double
 }
 
 private final class SphericalReprojectionPreviewRenderer {
     private let width: Int
     private let height: Int
 
-    init(width: Int = 1024, height: Int = 512) {
+    init(width: Int = 2048, height: Int = 1024) {
         self.width = width
         self.height = height
     }
@@ -210,48 +277,65 @@ private final class SphericalReprojectionPreviewRenderer {
 
         let sources = try inputs.map(SourceImage.init(input:))
         var output = [UInt8](repeating: 0, count: width * height * 4)
+        var coverageMask = [UInt8](repeating: 0, count: width * height * 4)
+        var targetIndex = [UInt8](repeating: 0, count: width * height * 4)
+        var contributionPixelCounts = [String: Int]()
         var coveredPixelCount = 0
 
         for y in 0..<height {
             for x in 0..<width {
                 let direction = worldDirectionForEquirectangularPixel(x: x, y: y)
-                guard let sample = sample(direction: direction, from: sources) else {
+                guard let projection = sample(direction: direction, from: sources) else {
                     continue
                 }
 
                 let outputIndex = (y * width + x) * 4
-                output[outputIndex] = sample.r
-                output[outputIndex + 1] = sample.g
-                output[outputIndex + 2] = sample.b
+                output[outputIndex] = projection.sample.r
+                output[outputIndex + 1] = projection.sample.g
+                output[outputIndex + 2] = projection.sample.b
                 output[outputIndex + 3] = 255
+
+                coverageMask[outputIndex] = 255
+                coverageMask[outputIndex + 1] = 255
+                coverageMask[outputIndex + 2] = 255
+                coverageMask[outputIndex + 3] = 255
+
+                targetIndex[outputIndex] = projection.debugColor.r
+                targetIndex[outputIndex + 1] = projection.debugColor.g
+                targetIndex[outputIndex + 2] = projection.debugColor.b
+                targetIndex[outputIndex + 3] = 255
+
+                contributionPixelCounts[projection.targetID, default: 0] += 1
                 coveredPixelCount += 1
             }
         }
 
-        guard let dataProvider = CGDataProvider(data: Data(output) as CFData),
-              let image = CGImage(
-                width: width,
-                height: height,
-                bitsPerComponent: 8,
-                bitsPerPixel: 32,
-                bytesPerRow: width * 4,
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
-                provider: dataProvider,
-                decode: nil,
-                shouldInterpolate: true,
-                intent: .defaultIntent
-              )
-        else {
-            throw SphericalCaptureExportError.previewEncodingFailed
+        let image = try Self.makeImage(pixels: output, width: width, height: height, shouldInterpolate: true)
+        let coverageMaskImage = try Self.makeImage(pixels: coverageMask, width: width, height: height, shouldInterpolate: false)
+        let targetIndexImage = try Self.makeImage(pixels: targetIndex, width: width, height: height, shouldInterpolate: false)
+        let totalPixelCount = width * height
+        let contributions = sources.map { source in
+            let pixelCount = contributionPixelCounts[source.targetID] ?? 0
+            let coveredContribution = coveredPixelCount > 0
+                ? Double(pixelCount) / Double(coveredPixelCount) * 100.0
+                : 0
+            return SphericalTargetContribution(
+                targetID: source.targetID,
+                debugColor: source.debugColor,
+                coverageContributionPercent: Double(pixelCount) / Double(totalPixelCount) * 100.0,
+                coveredPixelContributionPercent: coveredContribution
+            )
         }
 
-        let coveragePercent = Double(coveredPixelCount) / Double(width * height) * 100.0
+        let coveragePercent = Double(coveredPixelCount) / Double(totalPixelCount) * 100.0
         return SphericalPreviewResult(
             image: image,
+            coverageMaskImage: coverageMaskImage,
+            targetIndexImage: targetIndexImage,
             width: width,
             height: height,
-            coveragePercent: coveragePercent
+            coveragePercent: coveragePercent,
+            targetContributions: contributions
         )
     }
 
@@ -268,7 +352,7 @@ private final class SphericalReprojectionPreviewRenderer {
         return simd_normalize(direction)
     }
 
-    private func sample(direction: SIMD3<Float>, from sources: [SourceImage]) -> PixelSample? {
+    private func sample(direction: SIMD3<Float>, from sources: [SourceImage]) -> SourceProjection? {
         var bestSource: SourceProjection?
 
         for source in sources {
@@ -280,13 +364,36 @@ private final class SphericalReprojectionPreviewRenderer {
             }
         }
 
-        return bestSource?.sample
+        return bestSource
+    }
+
+    private static func makeImage(pixels: [UInt8], width: Int, height: Int, shouldInterpolate: Bool) throws -> CGImage {
+        guard let dataProvider = CGDataProvider(data: Data(pixels) as CFData),
+              let image = CGImage(
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bitsPerPixel: 32,
+                bytesPerRow: width * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                provider: dataProvider,
+                decode: nil,
+                shouldInterpolate: shouldInterpolate,
+                intent: .defaultIntent
+              )
+        else {
+            throw SphericalCaptureExportError.previewEncodingFailed
+        }
+        return image
     }
 }
 
 private struct SourceProjection {
+    let targetID: String
     let alignment: Float
     let sample: PixelSample
+    let debugColor: DebugColor
 }
 
 private struct PixelSample {
@@ -295,7 +402,51 @@ private struct PixelSample {
     let b: UInt8
 }
 
+private struct DebugColor {
+    let r: UInt8
+    let g: UInt8
+    let b: UInt8
+
+    var hexString: String {
+        String(format: "#%02X%02X%02X", r, g, b)
+    }
+
+    static func color(for targetID: String) -> DebugColor {
+        switch targetID {
+        case "horizontal-000":
+            return DebugColor(r: 230, g: 57, b: 70)
+        case "horizontal-090":
+            return DebugColor(r: 29, g: 185, b: 84)
+        case "horizontal-180":
+            return DebugColor(r: 0, g: 122, b: 255)
+        case "horizontal-270":
+            return DebugColor(r: 255, g: 149, b: 0)
+        case "upward-045":
+            return DebugColor(r: 175, g: 82, b: 222)
+        case "upward-225":
+            return DebugColor(r: 90, g: 200, b: 250)
+        case "zenith":
+            return DebugColor(r: 255, g: 214, b: 10)
+        case "nadir":
+            return DebugColor(r: 255, g: 45, b: 85)
+        default:
+            var hash = UInt32(2166136261)
+            for byte in targetID.utf8 {
+                hash ^= UInt32(byte)
+                hash &*= 16777619
+            }
+            return DebugColor(
+                r: UInt8(64 + (hash & 0x7f)),
+                g: UInt8(64 + ((hash >> 8) & 0x7f)),
+                b: UInt8(64 + ((hash >> 16) & 0x7f))
+            )
+        }
+    }
+}
+
 private final class SourceImage {
+    let targetID: String
+    let debugColor: DebugColor
     let width: Int
     let height: Int
     let pixels: [UInt8]
@@ -309,6 +460,8 @@ private final class SourceImage {
 
     init(input: ProjectionInput) throws {
         let capture = input.capturedTarget.capture
+        self.targetID = input.capturedTarget.target.id
+        self.debugColor = DebugColor.color(for: input.capturedTarget.target.id)
         self.width = input.image.width
         self.height = input.image.height
         self.pixels = try Self.rgbaPixels(from: input.image)
@@ -340,7 +493,12 @@ private final class SourceImage {
 
         let sample = pixelAt(x: Int(projectedX), y: Int(projectedY))
         let alignment = simd_dot(simd_normalize(worldDirection), cameraForward)
-        return SourceProjection(alignment: alignment, sample: sample)
+        return SourceProjection(
+            targetID: targetID,
+            alignment: alignment,
+            sample: sample,
+            debugColor: debugColor
+        )
     }
 
     private func pixelAt(x: Int, y: Int) -> PixelSample {
