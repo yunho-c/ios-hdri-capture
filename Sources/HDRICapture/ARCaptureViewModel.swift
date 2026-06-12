@@ -45,6 +45,15 @@ final class ARCaptureViewModel: NSObject, ObservableObject {
         return sphericalCaptureSession.capturedCount > 0 && !sphericalExportState.isExporting
     }
 
+    var isCurrentSphericalTargetCaptured: Bool {
+        guard let sphericalCaptureSession,
+              let currentTarget = sphericalCaptureSession.currentTarget
+        else {
+            return false
+        }
+        return sphericalCaptureSession.isCaptured(currentTarget)
+    }
+
     private var trackingStateAllowsGuidedCapture: Bool {
         trackingState == "Normal" || trackingState == "Limited: initializing"
     }
@@ -203,6 +212,20 @@ final class ARCaptureViewModel: NSObject, ObservableObject {
 
     func recaptureCurrentSphericalTarget() {
         captureCurrentSphericalTarget()
+    }
+
+    func selectSphericalTargetForRecapture(_ target: SphericalTarget) {
+        guard var sphericalCaptureSession,
+              sphericalCaptureSession.selectCapturedTargetForRecapture(targetID: target.id)
+        else {
+            return
+        }
+
+        self.sphericalCaptureSession = sphericalCaptureSession
+        sphericalCaptureState = .active
+        latestSphericalExport = nil
+        sphericalExportState = .idle
+        statusMessage = "Ready to recapture \(target.label)"
     }
 
     func exportLatestCaptureDebugBundle() {

@@ -94,7 +94,10 @@ struct ContentView: View {
                 Button {
                     captureModel.captureCurrentSphericalTarget()
                 } label: {
-                    Label("Capture Current Target", systemImage: "camera.viewfinder")
+                    Label(
+                        captureModel.isCurrentSphericalTargetCaptured ? "Recapture Current Target" : "Capture Current Target",
+                        systemImage: "camera.viewfinder"
+                    )
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(!captureModel.canCaptureCurrentSphericalTarget)
@@ -132,8 +135,24 @@ struct ContentView: View {
                         .fontWeight(target.id == session.currentTarget?.id ? .semibold : .regular)
                     Spacer()
                     if let captured {
-                        Text(String(format: "%.1f deg", captured.angularErrorDegrees))
-                            .foregroundStyle(.secondary)
+                        HStack(spacing: 8) {
+                            Text(String(format: "%.1f deg", captured.angularErrorDegrees))
+                                .foregroundStyle(.secondary)
+
+                            if target.id == session.currentTarget?.id {
+                                Text("Current")
+                                    .foregroundStyle(.blue)
+                            } else {
+                                Button {
+                                    captureModel.selectSphericalTargetForRecapture(target)
+                                } label: {
+                                    Image(systemName: "arrow.clockwise")
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.mini)
+                                .accessibilityLabel("Recapture \(target.label)")
+                            }
+                        }
                     } else if target.id == session.currentTarget?.id {
                         Text("Current")
                             .foregroundStyle(.blue)
