@@ -157,6 +157,11 @@ final class CaptureExportWriter {
     private func metadataData(for capture: HighResolutionFrameCapture, exportedAt: Date) throws -> Data {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
+        encoder.nonConformingFloatEncodingStrategy = .convertToString(
+            positiveInfinity: "Infinity",
+            negativeInfinity: "-Infinity",
+            nan: "NaN"
+        )
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         return try encoder.encode(CaptureExportMetadata(capture: capture, exportedAt: exportedAt))
     }

@@ -147,7 +147,7 @@ final class ARCaptureViewModel: NSObject, ObservableObject {
     }
 
     func captureCurrentSphericalTarget() {
-        guard canCaptureCurrentSphericalTarget, let sphericalCaptureSession else {
+        guard canCaptureCurrentSphericalTarget, var sphericalCaptureSession else {
             return
         }
 
@@ -185,6 +185,7 @@ final class ARCaptureViewModel: NSObject, ObservableObject {
             self.latestExport = nil
             self.captureExportState = .idle
             sphericalCaptureSession.record(capture: capture, for: target)
+            self.sphericalCaptureSession = sphericalCaptureSession
             self.latestSphericalExport = nil
             self.sphericalExportState = .idle
             self.highResolutionCaptureState = .succeeded

@@ -104,7 +104,7 @@ struct SphericalCapturedTarget: Identifiable {
     let angularErrorDegrees: Double
 }
 
-final class SphericalCaptureSession: Identifiable {
+struct SphericalCaptureSession: Identifiable {
     let id = UUID()
     let createdAt = Date()
     let targets: [SphericalTarget]
@@ -138,7 +138,7 @@ final class SphericalCaptureSession: Identifiable {
         capturedTargets[target.id] == nil ? "Pending" : "Captured"
     }
 
-    func record(capture: HighResolutionFrameCapture, for target: SphericalTarget) {
+    mutating func record(capture: HighResolutionFrameCapture, for target: SphericalTarget) {
         let error = Self.angularErrorDegrees(targetDirection: target.direction, cameraForward: capture.cameraForwardWorld)
         capturedTargets[target.id] = SphericalCapturedTarget(
             id: target.id,
@@ -149,14 +149,14 @@ final class SphericalCaptureSession: Identifiable {
         advanceToNextPendingTarget()
     }
 
-    func recaptureCurrentTarget(with capture: HighResolutionFrameCapture) {
+    mutating func recaptureCurrentTarget(with capture: HighResolutionFrameCapture) {
         guard let currentTarget else {
             return
         }
         record(capture: capture, for: currentTarget)
     }
 
-    func advanceToNextPendingTarget() {
+    mutating func advanceToNextPendingTarget() {
         guard !isComplete else {
             currentTargetIndex = targets.count
             return

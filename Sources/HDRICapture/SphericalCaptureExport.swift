@@ -172,6 +172,11 @@ final class SphericalCaptureExportWriter {
     private func metadataData<T: Encodable>(_ metadata: T) throws -> Data {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
+        encoder.nonConformingFloatEncodingStrategy = .convertToString(
+            positiveInfinity: "Infinity",
+            negativeInfinity: "-Infinity",
+            nan: "NaN"
+        )
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         return try encoder.encode(metadata)
     }
