@@ -10,6 +10,28 @@ CRATE_DIR="$ROOT_DIR/rust/hdri_encoder"
 CONFIGURATION="${CONFIGURATION:-Debug}"
 PLATFORM_NAME="${PLATFORM_NAME:-iphonesimulator}"
 
+find_cargo() {
+  if [[ -n "${CARGO:-}" && -x "${CARGO:-}" ]]; then
+    echo "$CARGO"
+    return
+  fi
+
+  if command -v cargo >/dev/null 2>&1; then
+    command -v cargo
+    return
+  fi
+
+  if [[ -x "$HOME/.cargo/bin/cargo" ]]; then
+    echo "$HOME/.cargo/bin/cargo"
+    return
+  fi
+
+  echo "error: cargo not found. Install Rust with rustup or set CARGO=/path/to/cargo." >&2
+  exit 127
+}
+
+CARGO_BIN="$(find_cargo)"
+
 if [[ "$CONFIGURATION" == "Release" ]]; then
   PROFILE_FLAG="--release"
   PROFILE_DIR="release"
@@ -23,7 +45,7 @@ export RUSTC_WRAPPER=
 
 build_target() {
   local rust_target="$1"
-  cargo build \
+  "$CARGO_BIN" build \
     --manifest-path "$CRATE_DIR/Cargo.toml" \
     --target "$rust_target" \
     $PROFILE_FLAG

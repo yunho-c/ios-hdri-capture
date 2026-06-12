@@ -48,6 +48,7 @@ targets:
       - sdk: ARKit.framework
       - sdk: Metal.framework
       - sdk: MetalKit.framework
+      - sdk: SceneKit.framework
       - sdk: SwiftUI.framework
     preBuildScripts:
       - path: scripts/build-rust-ios.sh
