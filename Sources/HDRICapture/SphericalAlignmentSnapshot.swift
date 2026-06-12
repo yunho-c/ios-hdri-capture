@@ -88,8 +88,13 @@ struct SphericalAlignmentSnapshot: Equatable {
 
         let forwardAlignment = simd_dot(cameraForward, targetDirection)
         let angularError = acos(max(-1, min(1, Double(forwardAlignment)))) * 180.0 / .pi
-        let horizontalOffset = simd_dot(cameraRight, targetDirection)
-        let verticalOffset = simd_dot(cameraUp, targetDirection)
+        let cameraRightOffset = simd_dot(cameraRight, targetDirection)
+        let cameraUpOffset = simd_dot(cameraUp, targetDirection)
+        // The app is portrait-only. ARKit's camera basis is rotated relative to the
+        // portrait UI overlay, so map camera-up to screen X and inverted camera-right
+        // to screen Y.
+        let horizontalOffset = cameraUpOffset
+        let verticalOffset = -cameraRightOffset
         let behind = forwardAlignment < -0.2
 
         let state: State
