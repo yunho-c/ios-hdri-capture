@@ -1,0 +1,5 @@
+namespace hdri_encoder {
+    string encoder_version();
+    string target_output_format();
+};
+

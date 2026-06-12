@@ -1,0 +1,18 @@
+[package]
+name = "hdri_encoder"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["staticlib", "cdylib", "rlib"]
+name = "hdri_encoder"
+
+[dependencies]
+uniffi = { version = "0.31.1", features = ["cli"] }
+
+[build-dependencies]
+uniffi = { version = "0.31.1", features = ["build"] }
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"

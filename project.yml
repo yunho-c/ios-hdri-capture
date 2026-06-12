@@ -1,0 +1,58 @@
+name: HDRICapture
+options:
+  bundleIdPrefix: com.yunhocho
+  deploymentTarget:
+    iOS: "18.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  HDRICapture:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources/HDRICapture
+      - path: Generated/UniFFI
+    info:
+      path: Generated/Info.plist
+      properties:
+        CFBundleDisplayName: HDRICapture
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        UILaunchScreen:
+          UIColorName: ""
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSCameraUsageDescription: HDRICapture uses the camera through ARKit to build environment lighting captures.
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.yunhocho.HDRICapture
+        PRODUCT_NAME: HDRICapture
+        GENERATE_INFOPLIST_FILE: false
+        ENABLE_USER_SCRIPT_SANDBOXING: false
+        LIBRARY_SEARCH_PATHS:
+          - "$(SRCROOT)/Build/Rust/$(PLATFORM_NAME)"
+        SWIFT_INCLUDE_PATHS:
+          - "$(SRCROOT)/Generated/UniFFI"
+        HEADER_SEARCH_PATHS:
+          - "$(SRCROOT)/Generated/UniFFI"
+        OTHER_SWIFT_FLAGS:
+          - "-Xcc"
+          - "-fmodule-map-file=$(SRCROOT)/Generated/UniFFI/hdri_encoderFFI.modulemap"
+        OTHER_LDFLAGS:
+          - "-lhdri_encoder"
+    dependencies:
+      - sdk: ARKit.framework
+      - sdk: Metal.framework
+      - sdk: MetalKit.framework
+      - sdk: SwiftUI.framework
+    preBuildScripts:
+      - path: scripts/build-rust-ios.sh
+        name: Build Rust encoder
+        basedOnDependencyAnalysis: false
+      - path: scripts/generate-uniffi-swift.sh
+        name: Generate UniFFI Swift bindings
+        basedOnDependencyAnalysis: false
