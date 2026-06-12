@@ -14,11 +14,18 @@ final class ARCaptureViewModel: NSObject, ObservableObject {
     @Published private(set) var highResolutionCaptureState: HighResolutionCaptureState = .idle
     @Published private(set) var highResolutionVideoFormat: HighResolutionVideoFormatSnapshot?
     @Published private(set) var latestHighResolutionCapture: HighResolutionFrameCapture?
+    @Published private(set) var captureExportState: CaptureExportState = .idle
+    @Published private(set) var latestExport: CaptureExportBundle?
 
     private var observedProbeIDs = Set<UUID>()
+    private let exportWriter = CaptureExportWriter()
 
     var canCaptureHighResolutionFrame: Bool {
         isRunning && !highResolutionCaptureState.isCapturing && !highResolutionCaptureState.isUnsupported
+    }
+
+    var canExportLatestCapture: Bool {
+        latestHighResolutionCapture != nil && !captureExportState.isExporting
     }
 
     override init() {
@@ -93,8 +100,29 @@ final class ARCaptureViewModel: NSObject, ObservableObject {
                 frame: frame,
                 streamingVideoFormat: self.highResolutionVideoFormat
             )
+            self.latestExport = nil
+            self.captureExportState = .idle
             self.highResolutionCaptureState = .succeeded
             self.statusMessage = "High-resolution frame captured"
+        }
+    }
+
+    func exportLatestCaptureDebugBundle() {
+        guard let latestHighResolutionCapture else {
+            captureExportState = .failed(CaptureExportError.missingCapture.localizedDescription)
+            return
+        }
+
+        captureExportState = .exporting
+        statusMessage = "Exporting debug capture bundle"
+
+        do {
+            latestExport = try exportWriter.writeDebugBundle(for: latestHighResolutionCapture)
+            captureExportState = .exported
+            statusMessage = "Debug capture bundle exported"
+        } catch {
+            captureExportState = .failed(error.localizedDescription)
+            statusMessage = "Debug export failed"
         }
     }
 

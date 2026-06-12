@@ -41,7 +41,7 @@ enum HighResolutionCaptureState: Equatable {
     }
 }
 
-struct HighResolutionVideoFormatSnapshot: Equatable {
+struct HighResolutionVideoFormatSnapshot: Codable, Equatable {
     let imageWidth: Int
     let imageHeight: Int
     let framesPerSecond: Int

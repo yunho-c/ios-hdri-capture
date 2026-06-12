@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var captureModel = ARCaptureViewModel()
+    @State private var shareItems: CaptureShareItems?
 
     private let rustEncoderVersion = encoderVersion()
     private let rustOutputFormat = targetOutputFormat()
@@ -46,6 +47,9 @@ struct ContentView: View {
             }
             .onDisappear {
                 captureModel.pause()
+            }
+            .sheet(item: $shareItems) { shareItems in
+                ActivityView(activityItems: shareItems.urls)
             }
         }
     }
@@ -96,9 +100,40 @@ struct ContentView: View {
                 LabeledContent("Exposure offset", value: capture.displayExposureOffset)
                 LabeledContent("Camera pose", value: capture.displayCameraTranslation)
                 LabeledContent("Intrinsics", value: capture.displayIntrinsics)
+                exportControls
             } else {
                 Text("Capture a frame to inspect still-image resolution, AR pose, intrinsics, and exposure metadata.")
                     .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var exportControls: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            LabeledContent("Export", value: captureModel.captureExportState.displayName)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Button {
+                    captureModel.exportLatestCaptureDebugBundle()
+                } label: {
+                    Label("Export Debug Bundle", systemImage: "square.and.arrow.down")
+                }
+                .buttonStyle(.bordered)
+                .disabled(!captureModel.canExportLatestCapture)
+
+                if let export = captureModel.latestExport {
+                    Button {
+                        shareItems = CaptureShareItems(urls: export.shareURLs)
+                    } label: {
+                        Label("Share Export", systemImage: "square.and.arrow.up")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+
+            if let export = captureModel.latestExport {
+                LabeledContent("Bundle", value: export.displayDirectoryName)
+                LabeledContent("Files", value: export.displayFileNames)
             }
         }
     }
@@ -155,4 +190,9 @@ private struct StatusBadge: View {
             .padding(.vertical, 7)
             .background(.black.opacity(0.65), in: Capsule())
     }
+}
+
+private struct CaptureShareItems: Identifiable {
+    let id = UUID()
+    let urls: [URL]
 }
