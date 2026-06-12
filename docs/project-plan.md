@@ -90,6 +90,9 @@ Acceptance criteria:
 
 ## Phase 4: Guided Single-Exposure Spherical Capture
 
+Status: implemented and first exported sphere bundles inspected. Bundle #1 appears
+complete enough to proceed with geometry/UX hardening before bracketing.
+
 This phase validates capture geometry and user guidance before multiplying every
 direction into bracket sets.
 
@@ -116,7 +119,41 @@ Acceptance criteria:
 - The app exports `manifest.json`, per-target artifacts, and `preview.jpg`.
 - The preview makes pose, coverage, gap, seam, and orientation problems visible.
 
-## Phase 5: Bracketed HDR Capture
+## Phase 5: Spherical Capture Hardening
+
+This phase makes the single-exposure spherical workflow reliable enough that bracketed
+capture is an extension of a proven geometry path, not a multiplier for unresolved
+guidance or projection issues.
+
+1. Improve guided alignment:
+   - show a stronger target reticle over the AR preview
+   - show directional hints such as turn left/right/up/down
+   - show angular error in degrees while aiming
+2. Gate capture on basic quality:
+   - require acceptable angular error from the current target
+   - require usable AR tracking
+   - prevent accidental capture when the target is clearly missed
+3. Add target-level recapture:
+   - allow selecting any completed target
+   - recapture that target without resetting the whole session
+   - update the manifest and preview from the replacement frame
+4. Improve reprojection diagnostics:
+   - export a coverage mask image
+   - export a target-index/debug-color equirectangular image
+   - report total coverage percentage and per-target contribution
+   - keep black/uncovered pixels visible for gap inspection
+5. Keep the workflow single-exposure until the geometry preview is repeatedly coherent.
+
+Acceptance criteria:
+
+- A user can see how to align each target without guessing.
+- Badly aimed or poorly tracked captures are blocked or easy to recapture.
+- Exported diagnostics identify gaps, seams, orientation errors, and dominant source
+  targets.
+- Multiple physical-device runs produce coherent `preview.jpg` outputs before bracketed
+  capture begins.
+
+## Phase 6: Bracketed HDR Capture
 
 This phase captures enough exposure range for lighting, including bright windows and
 lamps.
@@ -139,7 +176,7 @@ Acceptance criteria:
 - The bracket set records exposure values and image payloads consistently.
 - Overexposed and underexposed bracket members can be identified for HDR merge.
 
-## Phase 6: Guided Bracketed Spherical Capture UX
+## Phase 7: Guided Bracketed Spherical Capture UX
 
 This phase turns bracketed still capture into a complete HDRI acquisition workflow.
 
@@ -165,7 +202,7 @@ Acceptance criteria:
 - Every required direction has a bracket group and pose metadata.
 - The app can resume or discard an incomplete capture session cleanly.
 
-## Phase 7: HDR Merge and Radiometric Normalization
+## Phase 8: HDR Merge and Radiometric Normalization
 
 This phase converts bracket groups into linear HDR directional images.
 
@@ -183,7 +220,7 @@ Acceptance criteria:
 - Bright light sources retain detail from short exposures.
 - Shadow detail comes from long exposures without dominating clipped highlights.
 
-## Phase 8: Spherical Reconstruction
+## Phase 9: Spherical Reconstruction
 
 This phase projects directional HDR images into a final environment map.
 
@@ -209,7 +246,7 @@ Acceptance criteria:
 - Seams are acceptable for a prototype and visible enough to debug.
 - Output resolution is independent of ARKit's environment-probe resolution.
 
-## Phase 9: OpenEXR Export and Share Workflow
+## Phase 10: OpenEXR Export and Share Workflow
 
 This phase turns the reconstructed environment into a usable renderer asset.
 
@@ -233,7 +270,7 @@ Acceptance criteria:
 - Debug artifacts are sufficient to diagnose bad seams, exposure issues, or missing
   capture directions.
 
-## Phase 10: Validation and Quality Bar
+## Phase 11: Validation and Quality Bar
 
 This phase decides whether the app is producing useful HDRIs rather than just files.
 
@@ -267,7 +304,8 @@ Do not continue the old Phase 3/4 path as the main product route. Instead:
 1. Keep the ARKit probe exporter as an optional debugging baseline.
 2. Use ARKit high-resolution frame capture for pose-aligned single stills.
 3. Validate guided spherical capture and LDR reprojection before adding brackets.
-4. Then implement bracketed HDR capture once geometry and UX are proven.
+4. Harden target guidance, recapture, and reprojection diagnostics.
+5. Then implement bracketed HDR capture once geometry and UX are proven.
 
 The most important technical risk is not EXR writing; it is reliable radiometric
 capture and alignment. The plan should therefore prove high-resolution bracket capture
