@@ -26,13 +26,14 @@ struct ContentView: View {
                                 .font(.title2)
                                 .fontWeight(.semibold)
 
-                            Text("Phase 3 captures a pose-aligned high-resolution AR frame; environment probes remain a low-resolution lighting reference.")
+                            Text("Capture single high-resolution frames, then validate spherical pose coverage before adding exposure brackets.")
                                 .foregroundStyle(.secondary)
                         }
 
                         Divider()
 
                         statusSection
+                        sphericalCaptureSection
                         highResolutionCaptureSection
                         probeSection
                         backendSection
@@ -63,6 +64,105 @@ struct ContentView: View {
             LabeledContent("Running", value: captureModel.isRunning ? "Yes" : "No")
             LabeledContent("Tracking", value: captureModel.trackingState)
             LabeledContent("Frame time", value: formattedFrameTimestamp)
+        }
+    }
+
+    private var sphericalCaptureSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Single-Exposure Sphere")
+                .font(.headline)
+
+            LabeledContent("State", value: captureModel.sphericalCaptureState.displayName)
+
+            if let session = captureModel.sphericalCaptureSession {
+                LabeledContent("Progress", value: session.progressDisplay)
+                if let target = session.currentTarget {
+                    LabeledContent("Current target", value: target.displayName)
+                    LabeledContent("Target kind", value: target.role.displayName)
+                } else {
+                    LabeledContent("Current target", value: "Complete")
+                }
+
+                Button {
+                    captureModel.captureCurrentSphericalTarget()
+                } label: {
+                    Label("Capture Current Target", systemImage: "camera.viewfinder")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!captureModel.canCaptureCurrentSphericalTarget)
+
+                Button(role: .destructive) {
+                    captureModel.resetSphericalCaptureSession()
+                } label: {
+                    Label("Reset Sphere", systemImage: "arrow.counterclockwise")
+                }
+                .buttonStyle(.bordered)
+
+                targetList(session)
+                sphericalExportControls
+            } else {
+                Text("Start a guided 8-shot session to validate spherical coverage and reprojection with single-exposure captures.")
+                    .foregroundStyle(.secondary)
+
+                Button {
+                    captureModel.startSphericalCaptureSession()
+                } label: {
+                    Label("Start 8-Shot Sphere", systemImage: "globe")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!captureModel.isRunning)
+            }
+        }
+    }
+
+    private func targetList(_ session: SphericalCaptureSession) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            ForEach(session.targets) { target in
+                let captured = session.capturedTargets[target.id]
+                HStack {
+                    Text(target.label)
+                    Spacer()
+                    if let captured {
+                        Text(String(format: "%.1f deg", captured.angularErrorDegrees))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(session.status(for: target))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .font(.caption)
+            }
+        }
+    }
+
+    private var sphericalExportControls: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            LabeledContent("Sphere export", value: captureModel.sphericalExportState.displayName)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Button {
+                    captureModel.exportSphericalCaptureSession()
+                } label: {
+                    Label("Export Sphere Bundle", systemImage: "square.and.arrow.down.on.square")
+                }
+                .buttonStyle(.bordered)
+                .disabled(!captureModel.canExportSphericalSession)
+
+                if let export = captureModel.latestSphericalExport {
+                    Button {
+                        shareItems = CaptureShareItems(urls: export.shareURLs)
+                    } label: {
+                        Label("Share Sphere Export", systemImage: "square.and.arrow.up")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+
+            if let export = captureModel.latestSphericalExport {
+                LabeledContent("Bundle", value: export.displayDirectoryName)
+                LabeledContent("Preview coverage", value: export.displayCoverage)
+                LabeledContent("Files", value: "\(export.shareURLs.count)")
+            }
         }
     }
 

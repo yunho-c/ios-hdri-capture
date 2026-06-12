@@ -16,9 +16,14 @@ final class ARCaptureViewModel: NSObject, ObservableObject {
     @Published private(set) var latestHighResolutionCapture: HighResolutionFrameCapture?
     @Published private(set) var captureExportState: CaptureExportState = .idle
     @Published private(set) var latestExport: CaptureExportBundle?
+    @Published private(set) var sphericalCaptureState: SphericalCaptureSessionState = .idle
+    @Published private(set) var sphericalCaptureSession: SphericalCaptureSession?
+    @Published private(set) var sphericalExportState: SphericalExportState = .idle
+    @Published private(set) var latestSphericalExport: SphericalCaptureExportBundle?
 
     private var observedProbeIDs = Set<UUID>()
     private let exportWriter = CaptureExportWriter()
+    private let sphericalExportWriter = SphericalCaptureExportWriter()
 
     var canCaptureHighResolutionFrame: Bool {
         isRunning && !highResolutionCaptureState.isCapturing && !highResolutionCaptureState.isUnsupported
@@ -26,6 +31,21 @@ final class ARCaptureViewModel: NSObject, ObservableObject {
 
     var canExportLatestCapture: Bool {
         latestHighResolutionCapture != nil && !captureExportState.isExporting
+    }
+
+    var canCaptureCurrentSphericalTarget: Bool {
+        sphericalCaptureState == .active && canCaptureHighResolutionFrame && trackingStateAllowsGuidedCapture
+    }
+
+    var canExportSphericalSession: Bool {
+        guard let sphericalCaptureSession else {
+            return false
+        }
+        return sphericalCaptureSession.capturedCount > 0 && !sphericalExportState.isExporting
+    }
+
+    private var trackingStateAllowsGuidedCapture: Bool {
+        trackingState == "Normal" || trackingState == "Limited: initializing"
     }
 
     override init() {
@@ -107,6 +127,79 @@ final class ARCaptureViewModel: NSObject, ObservableObject {
         }
     }
 
+    func startSphericalCaptureSession() {
+        sphericalCaptureSession = SphericalCaptureSession()
+        sphericalCaptureState = .active
+        sphericalExportState = .idle
+        latestSphericalExport = nil
+        statusMessage = "Started spherical capture session"
+    }
+
+    func resetSphericalCaptureSession() {
+        sphericalCaptureSession = nil
+        sphericalCaptureState = .idle
+        sphericalExportState = .idle
+        latestSphericalExport = nil
+        statusMessage = "Reset spherical capture session"
+    }
+
+    func captureCurrentSphericalTarget() {
+        guard canCaptureCurrentSphericalTarget, let sphericalCaptureSession else {
+            return
+        }
+
+        guard let target = sphericalCaptureSession.currentTarget else {
+            sphericalCaptureState = .complete
+            statusMessage = "Spherical capture complete"
+            return
+        }
+
+        highResolutionCaptureState = .capturing
+        statusMessage = "Capturing \(target.label)"
+
+        session.captureHighResolutionFrame { [weak self] frame, error in
+            guard let self else {
+                return
+            }
+
+            if let error {
+                self.highResolutionCaptureState = .failed(error.localizedDescription)
+                self.statusMessage = "Spherical target capture failed"
+                return
+            }
+
+            guard let frame else {
+                self.highResolutionCaptureState = .failed("ARKit did not return a frame")
+                self.statusMessage = "Spherical target capture failed"
+                return
+            }
+
+            let capture = HighResolutionFrameCapture(
+                frame: frame,
+                streamingVideoFormat: self.highResolutionVideoFormat
+            )
+            self.latestHighResolutionCapture = capture
+            self.latestExport = nil
+            self.captureExportState = .idle
+            sphericalCaptureSession.record(capture: capture, for: target)
+            self.latestSphericalExport = nil
+            self.sphericalExportState = .idle
+            self.highResolutionCaptureState = .succeeded
+
+            if sphericalCaptureSession.isComplete {
+                self.sphericalCaptureState = .complete
+                self.statusMessage = "Spherical capture complete"
+            } else {
+                self.sphericalCaptureState = .active
+                self.statusMessage = "Captured \(target.label)"
+            }
+        }
+    }
+
+    func recaptureCurrentSphericalTarget() {
+        captureCurrentSphericalTarget()
+    }
+
     func exportLatestCaptureDebugBundle() {
         guard let latestHighResolutionCapture else {
             captureExportState = .failed(CaptureExportError.missingCapture.localizedDescription)
@@ -123,6 +216,25 @@ final class ARCaptureViewModel: NSObject, ObservableObject {
         } catch {
             captureExportState = .failed(error.localizedDescription)
             statusMessage = "Debug export failed"
+        }
+    }
+
+    func exportSphericalCaptureSession() {
+        guard let sphericalCaptureSession else {
+            sphericalExportState = .failed("Start a spherical capture session before exporting.")
+            return
+        }
+
+        sphericalExportState = .exporting
+        statusMessage = "Exporting spherical capture session"
+
+        do {
+            latestSphericalExport = try sphericalExportWriter.writeSessionBundle(for: sphericalCaptureSession)
+            sphericalExportState = .exported
+            statusMessage = "Spherical capture session exported"
+        } catch {
+            sphericalExportState = .failed(error.localizedDescription)
+            statusMessage = "Spherical export failed"
         }
     }
 

@@ -88,7 +88,35 @@ Acceptance criteria:
 - The app exposes the ARKit high-resolution video format and the captured still
   resolution.
 
-## Phase 4: Bracketed HDR Capture
+## Phase 4: Guided Single-Exposure Spherical Capture
+
+This phase validates capture geometry and user guidance before multiplying every
+direction into bracket sets.
+
+1. Use a fixed fast 8-shot capture pattern:
+   - four horizontal directions
+   - two upward oblique directions
+   - one zenith direction
+   - one nadir-ish direction
+2. Guide the user through pending, current, and completed targets.
+3. Capture one high-resolution ARKit frame for each target.
+4. Store each target with:
+   - target yaw and pitch
+   - actual AR camera transform
+   - camera intrinsics
+   - exposure metadata
+   - angular error from the requested direction
+5. Export a session bundle containing per-target JPEG/JSON artifacts, a manifest, and a
+   low-resolution LDR equirectangular reprojection preview.
+6. Treat the preview as a geometry debug artifact, not a final HDRI.
+
+Acceptance criteria:
+
+- A user can complete the 8-shot guided capture pattern on device.
+- The app exports `manifest.json`, per-target artifacts, and `preview.jpg`.
+- The preview makes pose, coverage, gap, seam, and orientation problems visible.
+
+## Phase 5: Bracketed HDR Capture
 
 This phase captures enough exposure range for lighting, including bright windows and
 lamps.
@@ -111,9 +139,9 @@ Acceptance criteria:
 - The bracket set records exposure values and image payloads consistently.
 - Overexposed and underexposed bracket members can be identified for HDR merge.
 
-## Phase 5: Guided Spherical Capture UX
+## Phase 6: Guided Bracketed Spherical Capture UX
 
-This phase turns still capture into a complete HDRI acquisition workflow.
+This phase turns bracketed still capture into a complete HDRI acquisition workflow.
 
 1. Use ARKit orientation and pose to guide the user through a sphere of target
    directions.
@@ -137,7 +165,7 @@ Acceptance criteria:
 - Every required direction has a bracket group and pose metadata.
 - The app can resume or discard an incomplete capture session cleanly.
 
-## Phase 6: HDR Merge and Radiometric Normalization
+## Phase 7: HDR Merge and Radiometric Normalization
 
 This phase converts bracket groups into linear HDR directional images.
 
@@ -155,7 +183,7 @@ Acceptance criteria:
 - Bright light sources retain detail from short exposures.
 - Shadow detail comes from long exposures without dominating clipped highlights.
 
-## Phase 7: Spherical Reconstruction
+## Phase 8: Spherical Reconstruction
 
 This phase projects directional HDR images into a final environment map.
 
@@ -181,7 +209,7 @@ Acceptance criteria:
 - Seams are acceptable for a prototype and visible enough to debug.
 - Output resolution is independent of ARKit's environment-probe resolution.
 
-## Phase 8: OpenEXR Export and Share Workflow
+## Phase 9: OpenEXR Export and Share Workflow
 
 This phase turns the reconstructed environment into a usable renderer asset.
 
@@ -205,7 +233,7 @@ Acceptance criteria:
 - Debug artifacts are sufficient to diagnose bad seams, exposure issues, or missing
   capture directions.
 
-## Phase 9: Validation and Quality Bar
+## Phase 10: Validation and Quality Bar
 
 This phase decides whether the app is producing useful HDRIs rather than just files.
 
@@ -237,9 +265,9 @@ Acceptance criteria:
 Do not continue the old Phase 3/4 path as the main product route. Instead:
 
 1. Keep the ARKit probe exporter as an optional debugging baseline.
-2. Implement Phase 3 next: AVFoundation high-resolution still capture with pose and
-   exposure metadata.
-3. Then implement bracketed HDR capture before investing in EXR projection/export.
+2. Use ARKit high-resolution frame capture for pose-aligned single stills.
+3. Validate guided spherical capture and LDR reprojection before adding brackets.
+4. Then implement bracketed HDR capture once geometry and UX are proven.
 
 The most important technical risk is not EXR writing; it is reliable radiometric
 capture and alignment. The plan should therefore prove high-resolution bracket capture
