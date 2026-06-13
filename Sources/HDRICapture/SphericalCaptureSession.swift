@@ -45,6 +45,36 @@ enum SphericalExportState: Equatable {
     }
 }
 
+enum SphericalFallbackCaptureState: Equatable {
+    case idle
+    case capturing
+    case captured
+    case unavailable(String)
+    case failed(String)
+
+    var displayName: String {
+        switch self {
+        case .idle:
+            return "Ready"
+        case .capturing:
+            return "Capturing"
+        case .captured:
+            return "Captured"
+        case .unavailable(let message):
+            return "Unavailable: \(message)"
+        case .failed(let message):
+            return "Failed: \(message)"
+        }
+    }
+
+    var isCapturing: Bool {
+        if case .capturing = self {
+            return true
+        }
+        return false
+    }
+}
+
 struct SphericalTarget: Identifiable, Codable, Equatable {
     enum Role: String, Codable {
         case horizontal
@@ -186,12 +216,20 @@ struct SphericalCapturedTarget: Identifiable {
     let angularErrorDegrees: Double
 }
 
+struct SphericalFallbackCapture: Identifiable {
+    let id = UUID()
+    let role: String
+    let capture: HighResolutionFrameCapture
+    let videoFormat: HighResolutionVideoFormatSnapshot
+}
+
 struct SphericalCaptureSession: Identifiable {
     let id = UUID()
     let createdAt = Date()
     let pattern: SphericalCapturePattern
     let targets: [SphericalTarget]
     private(set) var capturedTargets: [String: SphericalCapturedTarget] = [:]
+    private(set) var fallbackCapture: SphericalFallbackCapture?
     var currentTargetIndex = 0
 
     init(pattern: SphericalCapturePattern = .defaultPattern) {
@@ -226,6 +264,10 @@ struct SphericalCaptureSession: Identifiable {
         capturedTargets[target.id] != nil
     }
 
+    var hasFallbackCapture: Bool {
+        fallbackCapture != nil
+    }
+
     mutating func record(capture: HighResolutionFrameCapture, for target: SphericalTarget) {
         let error = Self.angularErrorDegrees(targetDirection: target.direction, cameraForward: capture.cameraForwardWorld)
         capturedTargets[target.id] = SphericalCapturedTarget(
@@ -253,6 +295,14 @@ struct SphericalCaptureSession: Identifiable {
 
         currentTargetIndex = targetIndex
         return true
+    }
+
+    mutating func recordFallback(capture: HighResolutionFrameCapture, videoFormat: HighResolutionVideoFormatSnapshot) {
+        fallbackCapture = SphericalFallbackCapture(
+            role: "ultraWideBehindLayer",
+            capture: capture,
+            videoFormat: videoFormat
+        )
     }
 
     mutating func advanceToNextPendingTarget() {

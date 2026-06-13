@@ -111,6 +111,7 @@ struct ContentView: View {
                 .buttonStyle(.bordered)
 
                 targetList(session)
+                sphericalFallbackControls(session)
                 sphericalExportControls
             } else {
                 Picker(
@@ -213,6 +214,24 @@ struct ContentView: View {
         }
     }
 
+    private func sphericalFallbackControls(_ session: SphericalCaptureSession) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            LabeledContent("Ultra-wide fallback", value: captureModel.sphericalFallbackCaptureState.displayName)
+            LabeledContent("Fallback format", value: captureModel.ultraWideFallbackAvailability)
+
+            Button {
+                captureModel.captureUltraWideFallbackLayer()
+            } label: {
+                Label(
+                    session.hasFallbackCapture ? "Recapture Ultra-Wide Fallback" : "Capture Ultra-Wide Fallback",
+                    systemImage: "camera.metering.matrix"
+                )
+            }
+            .buttonStyle(.bordered)
+            .disabled(!captureModel.canCaptureSphericalFallback)
+        }
+    }
+
     private var highResolutionCaptureSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("High-Resolution Still")
@@ -224,6 +243,7 @@ struct ContentView: View {
                 LabeledContent("AR video format", value: videoFormat.displayName)
                 LabeledContent("Camera", value: "\(videoFormat.captureDevicePosition), \(videoFormat.captureDeviceType)")
                 LabeledContent("Recommended", value: videoFormat.isRecommendedForHighResolutionFrameCapturing ? "Yes" : "No")
+                LabeledContent("AR formats", value: "\(captureModel.supportedVideoFormats.count)")
             } else {
                 Text("No recommended high-resolution ARKit video format was reported for this device.")
                     .foregroundStyle(.secondary)

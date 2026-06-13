@@ -48,6 +48,7 @@ struct HighResolutionVideoFormatSnapshot: Codable, Equatable {
     let captureDevicePosition: String
     let captureDeviceType: String
     let isRecommendedForHighResolutionFrameCapturing: Bool
+    let isVideoHDRSupported: Bool
 
     init(format: ARConfiguration.VideoFormat) {
         imageWidth = Int(format.imageResolution.width.rounded())
@@ -56,6 +57,7 @@ struct HighResolutionVideoFormatSnapshot: Codable, Equatable {
         captureDevicePosition = format.captureDevicePosition.displayName
         captureDeviceType = format.captureDeviceType.displayName
         isRecommendedForHighResolutionFrameCapturing = format.isRecommendedForHighResolutionFrameCapturing
+        isVideoHDRSupported = format.isVideoHDRSupported
     }
 
     var displayResolution: String {
@@ -64,6 +66,11 @@ struct HighResolutionVideoFormatSnapshot: Codable, Equatable {
 
     var displayName: String {
         "\(displayResolution) @ \(framesPerSecond) fps"
+    }
+
+    var isBackUltraWide: Bool {
+        captureDevicePosition == AVCaptureDevice.Position.back.displayName
+            && captureDeviceType == AVCaptureDevice.DeviceType.builtInUltraWideCamera.displayName
     }
 }
 

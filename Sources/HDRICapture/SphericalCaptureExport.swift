@@ -40,6 +40,7 @@ struct SphericalCaptureManifest: Codable {
     let patternName: String
     let preview: SphericalPreviewMetadata
     let diagnostics: SphericalDiagnosticsMetadata
+    let fallbackSources: [SphericalFallbackManifest]
     let targets: [SphericalTargetManifest]
 }
 
@@ -53,6 +54,18 @@ struct SphericalPreviewMetadata: Codable {
 struct SphericalDiagnosticsMetadata: Codable {
     let coverageMaskFileName: String
     let targetIndexFileName: String
+    let fallbackPreviewFileName: String?
+    let previewWithFallbackFileName: String?
+    let targetIndexWithFallbackFileName: String?
+}
+
+struct SphericalFallbackManifest: Codable {
+    let role: String
+    let imageFileName: String
+    let metadataFileName: String
+    let previewFileName: String
+    let videoFormat: HighResolutionVideoFormatSnapshot
+    let capture: CaptureExportMetadata
 }
 
 struct SphericalTargetManifest: Codable {
@@ -84,6 +97,8 @@ final class SphericalCaptureExportWriter {
         var fileURLs: [URL] = []
         var targetManifestsByID: [String: SphericalTargetManifest] = [:]
         var projectionInputs: [ProjectionInput] = []
+        var fallbackInput: ProjectionInput?
+        var fallbackManifests: [SphericalFallbackManifest] = []
 
         for target in session.targets {
             if let capturedTarget = session.capturedTargets[target.id] {
@@ -126,6 +141,43 @@ final class SphericalCaptureExportWriter {
             }
         }
 
+        if let fallbackCapture = session.fallbackCapture {
+            let fallbackDirectoryURL = directoryURL.appendingPathComponent("fallback", isDirectory: true)
+            try fileManager.createDirectory(at: fallbackDirectoryURL, withIntermediateDirectories: true)
+
+            let imageFileName = "fallback/ultra-wide.jpg"
+            let metadataFileName = "fallback/ultra-wide.json"
+            let fallbackPreviewFileName = "fallback-preview.jpg"
+            let imageURL = directoryURL.appendingPathComponent(imageFileName)
+            let metadataURL = directoryURL.appendingPathComponent(metadataFileName)
+
+            let image = try cgImage(for: fallbackCapture.capture)
+            try jpegData(from: image).write(to: imageURL, options: [.atomic])
+            let metadata = CaptureExportMetadata(capture: fallbackCapture.capture, exportedAt: createdAt)
+            try metadataData(metadata).write(to: metadataURL, options: [.atomic])
+
+            fileURLs.append(imageURL)
+            fileURLs.append(metadataURL)
+
+            let input = ProjectionInput(fallbackCapture: fallbackCapture, image: image)
+            fallbackInput = input
+            let fallbackPreviewResult = try SphericalReprojectionPreviewRenderer().render(inputs: [input])
+            let fallbackPreviewURL = directoryURL.appendingPathComponent(fallbackPreviewFileName)
+            try jpegData(from: fallbackPreviewResult.image).write(to: fallbackPreviewURL, options: [.atomic])
+            fileURLs.append(fallbackPreviewURL)
+
+            fallbackManifests.append(
+                SphericalFallbackManifest(
+                    role: fallbackCapture.role,
+                    imageFileName: imageFileName,
+                    metadataFileName: metadataFileName,
+                    previewFileName: fallbackPreviewFileName,
+                    videoFormat: fallbackCapture.videoFormat,
+                    capture: metadata
+                )
+            )
+        }
+
         let previewResult = try SphericalReprojectionPreviewRenderer().render(inputs: projectionInputs)
         let previewURL = directoryURL.appendingPathComponent("preview.jpg")
         try jpegData(from: previewResult.image).write(to: previewURL, options: [.atomic])
@@ -138,6 +190,25 @@ final class SphericalCaptureExportWriter {
         let targetIndexURL = directoryURL.appendingPathComponent("target-index.png")
         try pngData(from: previewResult.targetIndexImage).write(to: targetIndexURL, options: [.atomic])
         fileURLs.append(targetIndexURL)
+
+        var previewWithFallbackFileName: String?
+        var targetIndexWithFallbackFileName: String?
+        if let fallbackInput {
+            let withFallbackResult = try SphericalReprojectionPreviewRenderer().render(
+                inputs: projectionInputs,
+                fallbackInput: fallbackInput
+            )
+            let previewFileName = "preview-with-fallback.jpg"
+            let targetIndexFileName = "target-index-with-fallback.png"
+            let previewWithFallbackURL = directoryURL.appendingPathComponent(previewFileName)
+            let targetIndexWithFallbackURL = directoryURL.appendingPathComponent(targetIndexFileName)
+            try jpegData(from: withFallbackResult.image).write(to: previewWithFallbackURL, options: [.atomic])
+            try pngData(from: withFallbackResult.targetIndexImage).write(to: targetIndexWithFallbackURL, options: [.atomic])
+            fileURLs.append(previewWithFallbackURL)
+            fileURLs.append(targetIndexWithFallbackURL)
+            previewWithFallbackFileName = previewFileName
+            targetIndexWithFallbackFileName = targetIndexFileName
+        }
 
         for contribution in previewResult.targetContributions {
             guard let manifest = targetManifestsByID[contribution.targetID] else {
@@ -159,7 +230,7 @@ final class SphericalCaptureExportWriter {
 
         let targetManifests = session.targets.compactMap { targetManifestsByID[$0.id] }
         let manifest = SphericalCaptureManifest(
-            schemaVersion: 3,
+            schemaVersion: 4,
             sessionID: session.id,
             exportedAt: createdAt,
             patternID: session.pattern.id,
@@ -172,8 +243,12 @@ final class SphericalCaptureExportWriter {
             ),
             diagnostics: SphericalDiagnosticsMetadata(
                 coverageMaskFileName: coverageMaskURL.lastPathComponent,
-                targetIndexFileName: targetIndexURL.lastPathComponent
+                targetIndexFileName: targetIndexURL.lastPathComponent,
+                fallbackPreviewFileName: fallbackManifests.first?.previewFileName,
+                previewWithFallbackFileName: previewWithFallbackFileName,
+                targetIndexWithFallbackFileName: targetIndexWithFallbackFileName
             ),
+            fallbackSources: fallbackManifests,
             targets: targetManifests
         )
         let manifestURL = directoryURL.appendingPathComponent("manifest.json")
@@ -242,8 +317,24 @@ final class SphericalCaptureExportWriter {
 }
 
 private struct ProjectionInput {
-    let capturedTarget: SphericalCapturedTarget
+    let sourceID: String
+    let capture: HighResolutionFrameCapture
+    let debugColor: DebugColor
     let image: CGImage
+
+    init(capturedTarget: SphericalCapturedTarget, image: CGImage) {
+        self.sourceID = capturedTarget.target.id
+        self.capture = capturedTarget.capture
+        self.debugColor = DebugColor.color(for: capturedTarget.target.id)
+        self.image = image
+    }
+
+    init(fallbackCapture: SphericalFallbackCapture, image: CGImage) {
+        self.sourceID = "fallback-ultra-wide"
+        self.capture = fallbackCapture.capture
+        self.debugColor = .fallback
+        self.image = image
+    }
 }
 
 private struct SphericalPreviewResult {
@@ -272,12 +363,13 @@ private final class SphericalReprojectionPreviewRenderer {
         self.height = height
     }
 
-    func render(inputs: [ProjectionInput]) throws -> SphericalPreviewResult {
+    func render(inputs: [ProjectionInput], fallbackInput: ProjectionInput? = nil) throws -> SphericalPreviewResult {
         guard !inputs.isEmpty else {
             throw SphericalCaptureExportError.noCapturedTargets
         }
 
         let sources = try inputs.map(SourceImage.init(input:))
+        let fallbackSource = try fallbackInput.map(SourceImage.init(input:))
         var output = [UInt8](repeating: 0, count: width * height * 4)
         var coverageMask = [UInt8](repeating: 0, count: width * height * 4)
         var targetIndex = [UInt8](repeating: 0, count: width * height * 4)
@@ -287,7 +379,11 @@ private final class SphericalReprojectionPreviewRenderer {
         for y in 0..<height {
             for x in 0..<width {
                 let direction = worldDirectionForEquirectangularPixel(x: x, y: y)
-                guard let projection = sample(direction: direction, from: sources) else {
+                let primaryProjection = sample(direction: direction, from: sources)
+                let fallbackProjection = primaryProjection == nil
+                    ? fallbackSource?.project(worldDirection: direction)
+                    : nil
+                guard let projection = primaryProjection ?? fallbackProjection else {
                     continue
                 }
 
@@ -413,6 +509,8 @@ private struct DebugColor {
         String(format: "#%02X%02X%02X", r, g, b)
     }
 
+    static let fallback = DebugColor(r: 0, g: 220, b: 220)
+
     static func color(for targetID: String) -> DebugColor {
         switch targetID {
         case "horizontal-000":
@@ -461,9 +559,9 @@ private final class SourceImage {
     let cy: Float
 
     init(input: ProjectionInput) throws {
-        let capture = input.capturedTarget.capture
-        self.targetID = input.capturedTarget.target.id
-        self.debugColor = DebugColor.color(for: input.capturedTarget.target.id)
+        let capture = input.capture
+        self.targetID = input.sourceID
+        self.debugColor = input.debugColor
         self.width = input.image.width
         self.height = input.image.height
         self.pixels = try Self.rgbaPixels(from: input.image)
