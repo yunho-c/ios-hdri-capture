@@ -36,6 +36,7 @@ struct SphericalCaptureManifest: Codable {
     let schemaVersion: Int
     let sessionID: UUID
     let exportedAt: Date
+    let patternID: String
     let patternName: String
     let preview: SphericalPreviewMetadata
     let diagnostics: SphericalDiagnosticsMetadata
@@ -158,10 +159,11 @@ final class SphericalCaptureExportWriter {
 
         let targetManifests = session.targets.compactMap { targetManifestsByID[$0.id] }
         let manifest = SphericalCaptureManifest(
-            schemaVersion: 2,
+            schemaVersion: 3,
             sessionID: session.id,
             exportedAt: createdAt,
-            patternName: "fast-8-single-exposure",
+            patternID: session.pattern.id,
+            patternName: session.pattern.displayName,
             preview: SphericalPreviewMetadata(
                 width: previewResult.width,
                 height: previewResult.height,

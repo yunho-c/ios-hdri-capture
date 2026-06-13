@@ -49,6 +49,7 @@ struct SphericalTarget: Identifiable, Codable, Equatable {
     enum Role: String, Codable {
         case horizontal
         case upward
+        case downward
         case zenith
         case nadir
 
@@ -58,6 +59,8 @@ struct SphericalTarget: Identifiable, Codable, Equatable {
                 return "Horizontal"
             case .upward:
                 return "Upward"
+            case .downward:
+                return "Downward"
             case .zenith:
                 return "Zenith"
             case .nadir:
@@ -97,6 +100,85 @@ struct SphericalTarget: Identifiable, Codable, Equatable {
     ]
 }
 
+struct SphericalCapturePattern: Identifiable, Codable, Equatable {
+    let id: String
+    let displayName: String
+    let shortDescription: String
+    let targets: [SphericalTarget]
+
+    var shotCount: Int {
+        targets.count
+    }
+
+    var startButtonTitle: String {
+        "Start \(shotCount)-Shot Sphere"
+    }
+
+    static let fastEight = SphericalCapturePattern(
+        id: "fast-8",
+        displayName: "Fast 8",
+        shortDescription: "Quick sparse validation",
+        targets: SphericalTarget.fastEight
+    )
+
+    static let balanced14 = SphericalCapturePattern(
+        id: "balanced-14",
+        displayName: "Balanced 14",
+        shortDescription: "Better overlap for serious captures",
+        targets: horizontalEight
+            + upwardFour
+            + polarTargets
+    )
+
+    static let full18 = SphericalCapturePattern(
+        id: "full-18",
+        displayName: "Full 18",
+        shortDescription: "Adds lower-band coverage",
+        targets: horizontalEight
+            + upwardFour
+            + polarTargets
+            + downwardFour
+    )
+
+    static let all: [SphericalCapturePattern] = [
+        fastEight,
+        balanced14,
+        full18
+    ]
+
+    static let defaultPattern = balanced14
+
+    private static let horizontalEight: [SphericalTarget] = [
+        SphericalTarget(id: "horizontal-000", label: "Front", role: .horizontal, yawDegrees: 0, pitchDegrees: 0),
+        SphericalTarget(id: "horizontal-045", label: "Front Right", role: .horizontal, yawDegrees: 45, pitchDegrees: 0),
+        SphericalTarget(id: "horizontal-090", label: "Right", role: .horizontal, yawDegrees: 90, pitchDegrees: 0),
+        SphericalTarget(id: "horizontal-135", label: "Back Right", role: .horizontal, yawDegrees: 135, pitchDegrees: 0),
+        SphericalTarget(id: "horizontal-180", label: "Back", role: .horizontal, yawDegrees: 180, pitchDegrees: 0),
+        SphericalTarget(id: "horizontal-225", label: "Back Left", role: .horizontal, yawDegrees: 225, pitchDegrees: 0),
+        SphericalTarget(id: "horizontal-270", label: "Left", role: .horizontal, yawDegrees: 270, pitchDegrees: 0),
+        SphericalTarget(id: "horizontal-315", label: "Front Left", role: .horizontal, yawDegrees: 315, pitchDegrees: 0)
+    ]
+
+    private static let upwardFour: [SphericalTarget] = [
+        SphericalTarget(id: "upward-045", label: "Up Front Right", role: .upward, yawDegrees: 45, pitchDegrees: 45),
+        SphericalTarget(id: "upward-135", label: "Up Back Right", role: .upward, yawDegrees: 135, pitchDegrees: 45),
+        SphericalTarget(id: "upward-225", label: "Up Back Left", role: .upward, yawDegrees: 225, pitchDegrees: 45),
+        SphericalTarget(id: "upward-315", label: "Up Front Left", role: .upward, yawDegrees: 315, pitchDegrees: 45)
+    ]
+
+    private static let downwardFour: [SphericalTarget] = [
+        SphericalTarget(id: "downward-045", label: "Down Front Right", role: .downward, yawDegrees: 45, pitchDegrees: -45),
+        SphericalTarget(id: "downward-135", label: "Down Back Right", role: .downward, yawDegrees: 135, pitchDegrees: -45),
+        SphericalTarget(id: "downward-225", label: "Down Back Left", role: .downward, yawDegrees: 225, pitchDegrees: -45),
+        SphericalTarget(id: "downward-315", label: "Down Front Left", role: .downward, yawDegrees: 315, pitchDegrees: -45)
+    ]
+
+    private static let polarTargets: [SphericalTarget] = [
+        SphericalTarget(id: "zenith", label: "Ceiling", role: .zenith, yawDegrees: 0, pitchDegrees: 80),
+        SphericalTarget(id: "nadir", label: "Floor", role: .nadir, yawDegrees: 0, pitchDegrees: -65)
+    ]
+}
+
 struct SphericalCapturedTarget: Identifiable {
     let id: String
     let target: SphericalTarget
@@ -107,12 +189,14 @@ struct SphericalCapturedTarget: Identifiable {
 struct SphericalCaptureSession: Identifiable {
     let id = UUID()
     let createdAt = Date()
+    let pattern: SphericalCapturePattern
     let targets: [SphericalTarget]
     private(set) var capturedTargets: [String: SphericalCapturedTarget] = [:]
     var currentTargetIndex = 0
 
-    init(targets: [SphericalTarget] = SphericalTarget.fastEight) {
-        self.targets = targets
+    init(pattern: SphericalCapturePattern = .defaultPattern) {
+        self.pattern = pattern
+        self.targets = pattern.targets
     }
 
     var currentTarget: SphericalTarget? {

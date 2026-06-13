@@ -17,6 +17,7 @@ final class ARCaptureViewModel: NSObject, ObservableObject {
     @Published private(set) var captureExportState: CaptureExportState = .idle
     @Published private(set) var latestExport: CaptureExportBundle?
     @Published private(set) var sphericalCaptureState: SphericalCaptureSessionState = .idle
+    @Published private(set) var selectedSphericalPattern: SphericalCapturePattern = .defaultPattern
     @Published private(set) var sphericalCaptureSession: SphericalCaptureSession?
     @Published private(set) var sphericalExportState: SphericalExportState = .idle
     @Published private(set) var latestSphericalExport: SphericalCaptureExportBundle?
@@ -52,6 +53,10 @@ final class ARCaptureViewModel: NSObject, ObservableObject {
             return false
         }
         return sphericalCaptureSession.isCaptured(currentTarget)
+    }
+
+    var sphericalCapturePatterns: [SphericalCapturePattern] {
+        SphericalCapturePattern.all
     }
 
     private var trackingStateAllowsGuidedCapture: Bool {
@@ -137,13 +142,23 @@ final class ARCaptureViewModel: NSObject, ObservableObject {
         }
     }
 
+    func selectSphericalCapturePattern(id: String) {
+        guard sphericalCaptureSession == nil,
+              let pattern = sphericalCapturePatterns.first(where: { $0.id == id })
+        else {
+            return
+        }
+
+        selectedSphericalPattern = pattern
+    }
+
     func startSphericalCaptureSession() {
-        sphericalCaptureSession = SphericalCaptureSession()
+        sphericalCaptureSession = SphericalCaptureSession(pattern: selectedSphericalPattern)
         sphericalCaptureState = .active
         sphericalExportState = .idle
         latestSphericalExport = nil
         sphericalAlignment = .unavailable
-        statusMessage = "Started spherical capture session"
+        statusMessage = "Started \(selectedSphericalPattern.displayName) spherical capture"
     }
 
     func resetSphericalCaptureSession() {

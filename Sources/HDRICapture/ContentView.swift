@@ -81,6 +81,7 @@ struct ContentView: View {
             LabeledContent("State", value: captureModel.sphericalCaptureState.displayName)
 
             if let session = captureModel.sphericalCaptureSession {
+                LabeledContent("Pattern", value: session.pattern.displayName)
                 LabeledContent("Progress", value: session.progressDisplay)
                 if let target = session.currentTarget {
                     LabeledContent("Current target", value: target.displayName)
@@ -112,13 +113,27 @@ struct ContentView: View {
                 targetList(session)
                 sphericalExportControls
             } else {
-                Text("Start a guided 8-shot session to validate spherical coverage and reprojection with single-exposure captures.")
+                Picker(
+                    "Pattern",
+                    selection: Binding(
+                        get: { captureModel.selectedSphericalPattern.id },
+                        set: { captureModel.selectSphericalCapturePattern(id: $0) }
+                    )
+                ) {
+                    ForEach(captureModel.sphericalCapturePatterns) { pattern in
+                        Text(pattern.displayName).tag(pattern.id)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                LabeledContent("Shots", value: "\(captureModel.selectedSphericalPattern.shotCount)")
+                Text(captureModel.selectedSphericalPattern.shortDescription)
                     .foregroundStyle(.secondary)
 
                 Button {
                     captureModel.startSphericalCaptureSession()
                 } label: {
-                    Label("Start 8-Shot Sphere", systemImage: "globe")
+                    Label(captureModel.selectedSphericalPattern.startButtonTitle, systemImage: "globe")
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(!captureModel.isRunning)
